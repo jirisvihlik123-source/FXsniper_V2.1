@@ -32,7 +32,7 @@ PAIR_VALUES = {
 # Start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Ahoj 👋\nPoužij příkaz /lot pro výpočet velikosti lotu."
+        "Ahoj \nPoužij příkaz /lot pro výpočet velikosti lotu."
     )
 
 
