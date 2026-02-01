@@ -1,6 +1,6 @@
 import sqlite3
 
-DB_NAME = "signals.db"
+DB_NAME = "trades.db"
 
 
 def get_connection():
@@ -12,16 +12,23 @@ def init_db():
     cur = conn.cursor()
 
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS signals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pair TEXT,
-            ai REAL,
-            adx REAL,
-            result TEXT,
-            timestamp TEXT
-        )
+    CREATE TABLE IF NOT EXISTS trades (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pair TEXT,
+        timeframe TEXT,
+        side TEXT,
+        entry REAL,
+        sl_pips REAL,
+        rrr REAL,
+        ai REAL,
+        adx REAL,
+        adx_delta REAL,
+        status TEXT,        -- OPEN / CLOSED
+        result TEXT,        -- WIN / LOSS / NULL
+        opened_at TEXT,
+        closed_at TEXT
+    )
     """)
 
     conn.commit()
     conn.close()
-
