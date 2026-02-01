@@ -1,14 +1,15 @@
 from database import get_connection
 
 
-def calculate_stats(limit=30):
+def calculate_status(limit=50):
     conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("""
         SELECT ai, adx, result
-        FROM signals
-        ORDER BY id DESC
+        FROM trades
+        WHERE status = 'CLOSED'
+        ORDER BY closed_at DESC
         LIMIT ?
     """, (limit,))
 
@@ -16,7 +17,7 @@ def calculate_stats(limit=30):
     conn.close()
 
     if not rows:
-        return "Zatím nejsou žádná data pro statistiku."
+        return "Zatím nejsou žádné uzavřené obchody pro statistiku."
 
     buckets = {
         "ai_70": [],
@@ -44,18 +45,17 @@ def calculate_stats(limit=30):
         else:
             buckets["adx_low"].append(win)
 
-    def winrate(data):
-        return round(sum(data) / len(data) * 100, 1) if data else 0
+    def wr(x):
+        return round(sum(x) / len(x) * 100, 1) if x else 0
 
     return (
-        f"Statistika signálů (posledních {len(rows)})\n\n"
-        f"AI skóre:\n"
-        f"70+   → Winrate {winrate(buckets['ai_70'])} %\n"
-        f"60–70 → Winrate {winrate(buckets['ai_60'])} %\n"
-        f"< 60  → Winrate {winrate(buckets['ai_low'])} %\n\n"
+        f"Status signálů (posledních {len(rows)})\n\n"
+        f"AI:\n"
+        f"70+   → {wr(buckets['ai_70'])} %\n"
+        f"60–70 → {wr(buckets['ai_60'])} %\n"
+        f"< 60  → {wr(buckets['ai_low'])} %\n\n"
         f"ADX:\n"
-        f"≥ 30  → Winrate {winrate(buckets['adx_high'])} %\n"
-        f"20–30 → Winrate {winrate(buckets['adx_mid'])} %\n"
-        f"< 20  → Winrate {winrate(buckets['adx_low'])} %"
+        f"≥ 30  → {wr(buckets['adx_high'])} %\n"
+        f"20–30 → {wr(buckets['adx_mid'])} %\n"
+        f"< 20  → {wr(buckets['adx_low'])} %"
     )
-
