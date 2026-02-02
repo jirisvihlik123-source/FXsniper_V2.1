@@ -17,7 +17,7 @@ from telegram.ext import (
 
 from database import init_db, get_connection
 from parser import parse_signal
-from stats import calculate_stats
+from stats import calculate_status
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -108,7 +108,7 @@ async def enter_pips(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ======================
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(calculate_stats())
+    await update.message.reply_text(calculate_status())
 
 
 # ======================
