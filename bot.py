@@ -10,7 +10,6 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
-    ConversationHandler,
     ContextTypes,
     filters,
 )
@@ -20,19 +19,6 @@ from parser import parse_signal
 from stats import calculate_status
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-
-# ======================
-# TEST HANDLER /lot
-# ======================
-
-async def lot_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("LOT COMMAND ZACHYCEN")
-
-# ======================
-# LOT KALKULAČKA (zatím NEAKTIVNÍ)
-# ======================
-
-ENTER_RISK, SELECT_PAIR, ENTER_PIPS = range(3)
 
 PAIR_VALUES = {
     "EURUSD": 10,
@@ -45,28 +31,97 @@ PAIR_VALUES = {
     "EURGBP": 12,
 }
 
-async def lot_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Zadej částku (USD), kterou chceš riskovat:")
-    return ENTER_RISK
+# ======================
+# START
+# ======================
 
-async def enter_risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return ConversationHandler.END
-
-async def select_pair(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return ConversationHandler.END
-
-async def enter_pips(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return ConversationHandler.END
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Ahoj 👋\n\n"
+        "Příkazy:\n"
+        "/lot – výpočet velikosti lotu\n"
+        "/status – statistika AI / ADX"
+    )
 
 # ======================
-# STATUS / ANALYTIKA
+# LOT – STAVOVÁ LOGIKA
+# ======================
+
+async def lot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
+    context.user_data["step"] = "risk"
+
+    await update.message.reply_text("Zadej částku (USD), kterou chceš riskovat:")
+
+
+async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "step" not in context.user_data:
+        return
+
+    step = context.user_data["step"]
+
+    # KROK 1 – RISK
+    if step == "risk":
+        try:
+            context.user_data["risk"] = float(update.message.text.replace(",", "."))
+        except ValueError:
+            await update.message.reply_text("Zadej platné číslo.")
+            return
+
+        keyboard = [
+            [InlineKeyboardButton(pair, callback_data=pair)]
+            for pair in PAIR_VALUES
+        ]
+
+        context.user_data["step"] = "pair"
+        await update.message.reply_text(
+            "Vyber měnový pár:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    # KROK 3 – PIPY
+    elif step == "pips":
+        try:
+            pips = float(update.message.text.replace(",", "."))
+        except ValueError:
+            await update.message.reply_text("Zadej platné číslo.")
+            return
+
+        risk = context.user_data["risk"]
+        pair = context.user_data["pair"]
+        pip_value = PAIR_VALUES[pair]
+
+        lot = risk / (pips * pip_value)
+
+        await update.message.reply_text(
+            "Výsledek výpočtu:\n\n"
+            f"Riziko: {risk} USD\n"
+            f"Pár: {pair}\n"
+            f"Pipy: {pips}\n"
+            f"Lot: {lot:.3f}"
+        )
+
+        context.user_data.clear()
+
+
+async def lot_pair_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    context.user_data["pair"] = query.data
+    context.user_data["step"] = "pips"
+
+    await query.edit_message_text("Zadej počet pipů:")
+
+# ======================
+# STATUS
 # ======================
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(calculate_status())
 
 # ======================
-# WATCHER SIGNÁLŮ
+# WATCHER
 # ======================
 
 async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -106,16 +161,15 @@ def main():
 
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # 🔴 TEST: tenhle handler MUSÍ odpovědět
-    app.add_handler(CommandHandler("lot", lot_test))
-
-    # status funguje jako kontrola
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("lot", lot_command))
     app.add_handler(CommandHandler("status", status_command))
 
-    # watcher
+    app.add_handler(CallbackQueryHandler(lot_pair_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text_handler))
     app.add_handler(MessageHandler(filters.TEXT, watch_signals))
 
-    print("Bot běží (TEST MODE)...")
+    print("Bot běží (PRODUCTION MODE)")
     app.run_polling()
 
 if __name__ == "__main__":
