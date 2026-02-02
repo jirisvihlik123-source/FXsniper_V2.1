@@ -17,7 +17,7 @@ from telegram.ext import (
 
 from database import init_db, get_connection
 from parser import parse_signal
-from stats import calculate_status
+from stats import calculate_status   # DŮLEŽITÉ: správný import
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -64,6 +64,7 @@ async def enter_risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton(pair, callback_data=pair)]
         for pair in PAIR_VALUES
     ]
+
     await update.message.reply_text(
         "Vyber měnový pár:",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -116,10 +117,6 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ======================
 
 async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Pasivně sleduje zprávy trading bota.
-    Ukládá POUZE uzavřené obchody (WIN / LOST).
-    """
     if not update.message or not update.message.text:
         return
 
@@ -165,13 +162,14 @@ def main():
             ENTER_PIPS: [MessageHandler(filters.TEXT & ~filters.COMMAND, enter_pips)],
         },
         fallbacks=[],
+        per_message=True   # 🔥 KRITICKÉ PRO GROUP CHAT
     )
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(lot_conv)
 
-    # sleduje všechny textové zprávy ve skupině
+    # pasivně sleduje všechny zprávy ve skupině
     app.add_handler(MessageHandler(filters.TEXT, watch_signals))
 
     print("Bot běží...")
