@@ -1,43 +1,51 @@
 import re
 
-PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "USDCAD", "AUDCAD", "EURGBP"]
+PAIRS = ["EURUSD", "GBPUSD", "USDJPY", "USDCAD", "AUDCAD", "EURGBP", "GBPJPY", "USDCHF"]
 
-
-def parse_signal(message: str):
-    """
-    Parsuje UZAVŘENÉ obchody (WIN / LOSS / LOST)
-    """
-
+def parse_open(message: str):
     text = message.upper()
 
-    # výsledek obchodu – tolerantní
-    result_match = re.search(r"CLOSED.*?(WIN|LOSS|LOST)", text)
+    ai = re.search(r"AI\s*(\d+)", text)
+    adx = re.search(r"ADX\s*([\d.]+)", text)
+
+    if not ai or not adx:
+        return None
+
+    pair = next((p for p in PAIRS if p in text), None)
+    if not pair:
+        return None
+
+    # OPEN alert = má AI + ADX, ale NEMÁ CLOSED
+    if "CLOSED" in text:
+        return None
+
+    return {
+        "pair": pair,
+        "ai": float(ai.group(1)),
+        "adx": float(adx.group(1)),
+    }
+
+
+def parse_closed(message: str):
+    text = message.upper()
+
+    if "CLOSED" not in text:
+        return None
+
+    result_match = re.search(r"(WIN|LOSS|LOST)", text)
     if not result_match:
         return None
 
-    raw_result = result_match.group(1)
-    result = "WIN" if raw_result == "WIN" else "LOST"
-
-    # AI a ADX
-    ai_match = re.search(r"AI\s*(\d+)", text)
-    adx_match = re.search(r"ADX\s*([\d.]+)", text)
-
-    if not ai_match or not adx_match:
-        return None
-
-    # měnový pár
-    pair = None
-    for p in PAIRS:
-        if p in text:
-            pair = p
-            break
+    result = "WIN" if result_match.group(1) == "WIN" else "LOST"
+    pair = next((p for p in PAIRS if p in text), None)
 
     if not pair:
         return None
 
     return {
         "pair": pair,
-        "ai": float(ai_match.group(1)),
-        "adx": float(adx_match.group(1)),
+        "result": result,
+    }
+ch.group(1)),
         "result": result,
     }
