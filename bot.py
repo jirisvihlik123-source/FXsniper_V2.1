@@ -20,10 +20,6 @@ from stats import calculate_status
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# ======================
-# LOT KALKULAČKA
-# ======================
-
 PAIR_VALUES = {
     "EURUSD": 10,
     "GBPJPY": 9.3,
@@ -35,30 +31,33 @@ PAIR_VALUES = {
     "EURGBP": 12,
 }
 
+# ======================
+# START
+# ======================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Ahoj 👋\n\n"
-        "Příkazy:\n"
         "/lot – výpočet velikosti lotu\n"
         "/status – statistika AI / ADX"
     )
 
 # ======================
-# /LOT – STAVOVÁ LOGIKA
+# /LOT
 # ======================
 
 async def lot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
+    context.user_data["active_lot"] = True
     context.user_data["step"] = "risk"
     await update.message.reply_text("Zadej částku (USD), kterou chceš riskovat:")
 
 async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "step" not in context.user_data:
+    if not context.user_data.get("active_lot"):
         return
 
-    step = context.user_data["step"]
+    step = context.user_data.get("step")
 
-    # KROK 1 – RISK
     if step == "risk":
         try:
             context.user_data["risk"] = float(update.message.text.replace(",", "."))
@@ -66,18 +65,14 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Zadej platné číslo.")
             return
 
-        keyboard = [
-            [InlineKeyboardButton(pair, callback_data=pair)]
-            for pair in PAIR_VALUES
-        ]
-
+        keyboard = [[InlineKeyboardButton(p, callback_data=p)] for p in PAIR_VALUES]
         context.user_data["step"] = "pair"
+
         await update.message.reply_text(
             "Vyber měnový pár:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # KROK 3 – PIPY
     elif step == "pips":
         try:
             pips = float(update.message.text.replace(",", "."))
@@ -92,7 +87,7 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lot = risk / (pips * pip_value)
 
         await update.message.reply_text(
-            "Výsledek výpočtu:\n\n"
+            f"Výsledek:\n\n"
             f"Riziko: {risk} USD\n"
             f"Pár: {pair}\n"
             f"Pipy: {pips}\n"
@@ -102,6 +97,9 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
 
 async def lot_pair_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.user_data.get("active_lot"):
+        return
+
     query = update.callback_query
     await query.answer()
 
@@ -118,7 +116,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(calculate_status())
 
 # ======================
-# WATCHER – OPEN + CLOSED
+# WATCHER (OPEN + CLOSED)
 # ======================
 
 async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -129,35 +127,20 @@ async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = get_connection()
     cur = conn.cursor()
 
-    # OPEN ALERT
-    open_signal = parse_open(text)
-    if open_signal:
+    open_sig = parse_open(text)
+    if open_sig:
         cur.execute(
-            """
-            INSERT INTO open_signals (pair, ai, adx, timestamp)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                open_signal["pair"],
-                open_signal["ai"],
-                open_signal["adx"],
-                datetime.utcnow().isoformat(),
-            )
+            "INSERT INTO open_signals (pair, ai, adx, timestamp) VALUES (?, ?, ?, ?)",
+            (open_sig["pair"], open_sig["ai"], open_sig["adx"], datetime.utcnow().isoformat())
         )
         conn.commit()
         conn.close()
         return
 
-    # CLOSED ALERT
     closed = parse_closed(text)
     if closed:
         cur.execute(
-            """
-            SELECT ai, adx FROM open_signals
-            WHERE pair = ?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
+            "SELECT ai, adx FROM open_signals WHERE pair = ? ORDER BY id DESC LIMIT 1",
             (closed["pair"],)
         )
         row = cur.fetchone()
@@ -165,17 +148,8 @@ async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if row:
             ai, adx = row
             cur.execute(
-                """
-                INSERT INTO closed_trades (pair, ai, adx, result, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    closed["pair"],
-                    ai,
-                    adx,
-                    closed["result"],
-                    datetime.utcnow().isoformat(),
-                )
+                "INSERT INTO closed_trades (pair, ai, adx, result, timestamp) VALUES (?, ?, ?, ?, ?)",
+                (closed["pair"], ai, adx, closed["result"], datetime.utcnow().isoformat())
             )
 
         conn.commit()
@@ -187,7 +161,6 @@ async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     init_db()
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -198,7 +171,7 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text_handler))
     app.add_handler(MessageHandler(filters.TEXT, watch_signals))
 
-    print("Bot běží (ARCH B – OPEN → CLOSED)")
+    print("Bot běží (FINAL)")
     app.run_polling()
 
 if __name__ == "__main__":
