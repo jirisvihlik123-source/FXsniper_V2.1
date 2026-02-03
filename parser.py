@@ -1,4 +1,5 @@
 import re
+import unicodedata
 
 PAIRS = [
     "EURUSD",
@@ -12,34 +13,36 @@ PAIRS = [
 ]
 
 # ======================
+# UTIL: NORMALIZACE TEXTU
+# ======================
+
+def normalize(text: str) -> str:
+    # odstraní emoji a zvláštní znaky
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = re.sub(r"[^\w\s\.\|\:\-\+]", " ", text)
+    return text.upper()
+
+# ======================
 # OPEN ALERT
 # ======================
 
 def parse_open(message: str):
-    """
-    Parsuje OPEN alerty:
-    - obsahují AI a ADX
-    - NESMÍ obsahovat CLOSED
-    """
-
-    text = message.upper()
+    text = normalize(message)
 
     # OPEN nesmí být CLOSED
     if "CLOSED" in text:
         return None
 
-    ai_match = re.search(r"AI\s*(\d+)", text)
-    adx_match = re.search(r"ADX\s*([\d.]+)", text)
+    # AI
+    ai_match = re.search(r"\bAI\s*(\d+)", text)
+    # ADX
+    adx_match = re.search(r"\bADX\s*([\d\.]+)", text)
 
     if not ai_match or not adx_match:
         return None
 
-    pair = None
-    for p in PAIRS:
-        if p in text:
-            pair = p
-            break
-
+    pair = next((p for p in PAIRS if p in text), None)
     if not pair:
         return None
 
@@ -54,29 +57,20 @@ def parse_open(message: str):
 # ======================
 
 def parse_closed(message: str):
-    """
-    Parsuje CLOSED alerty:
-    - WIN / LOSS / LOST
-    """
-
-    text = message.upper()
+    text = normalize(message)
 
     if "CLOSED" not in text:
         return None
 
-    result_match = re.search(r"(WIN|LOSS|LOST)", text)
+    # WON / WIN / LOSS / LOST
+    result_match = re.search(r"\b(WON|WIN|LOSS|LOST)\b", text)
     if not result_match:
         return None
 
-    result_raw = result_match.group(1)
-    result = "WIN" if result_raw == "WIN" else "LOST"
+    raw = result_match.group(1)
+    result = "WIN" if raw in ("WIN", "WON") else "LOST"
 
-    pair = None
-    for p in PAIRS:
-        if p in text:
-            pair = p
-            break
-
+    pair = next((p for p in PAIRS if p in text), None)
     if not pair:
         return None
 
