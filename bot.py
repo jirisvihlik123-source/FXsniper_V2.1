@@ -46,7 +46,6 @@ async def lot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     context.user_data["active_lot"] = True
     context.user_data["step"] = "risk"
-
     await update.message.reply_text("Zadej částku (USD), kterou chceš riskovat:")
 
 async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -62,12 +61,9 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Zadej platné číslo.")
             return
 
-        keyboard = [
-            [InlineKeyboardButton(pair, callback_data=pair)]
-            for pair in PAIR_VALUES
-        ]
-
+        keyboard = [[InlineKeyboardButton(p, callback_data=p)] for p in PAIR_VALUES]
         context.user_data["step"] = "pair"
+
         await update.message.reply_text(
             "Vyber měnový pár:",
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -82,12 +78,10 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         risk = context.user_data["risk"]
         pair = context.user_data["pair"]
-        pip_value = PAIR_VALUES[pair]
-
-        lot = risk / (pips * pip_value)
+        lot = risk / (pips * PAIR_VALUES[pair])
 
         await update.message.reply_text(
-            "Výsledek výpočtu:\n\n"
+            f"Výsledek:\n"
             f"Riziko: {risk} USD\n"
             f"Pár: {pair}\n"
             f"Pipy: {pips}\n"
@@ -105,7 +99,6 @@ async def lot_pair_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["pair"] = query.data
     context.user_data["step"] = "pips"
-
     await query.edit_message_text("Zadej počet pipů:")
 
 # ======================
@@ -116,7 +109,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(calculate_status())
 
 # ======================
-# WATCHER (NESMÍ BLOKOVAT)
+# WATCHER (NEBLOKUJE)
 # ======================
 
 async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -130,16 +123,8 @@ async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     open_sig = parse_open(text)
     if open_sig:
         cur.execute(
-            """
-            INSERT INTO open_signals (pair, ai, adx, timestamp)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                open_sig["pair"],
-                open_sig["ai"],
-                open_sig["adx"],
-                datetime.utcnow().isoformat(),
-            )
+            "INSERT INTO open_signals (pair, ai, adx, timestamp) VALUES (?, ?, ?, ?)",
+            (open_sig["pair"], open_sig["ai"], open_sig["adx"], datetime.utcnow().isoformat())
         )
         conn.commit()
         conn.close()
@@ -148,30 +133,15 @@ async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     closed = parse_closed(text)
     if closed:
         cur.execute(
-            """
-            SELECT ai, adx FROM open_signals
-            WHERE pair = ?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
+            "SELECT ai, adx FROM open_signals WHERE pair=? ORDER BY id DESC LIMIT 1",
             (closed["pair"],)
         )
         row = cur.fetchone()
 
         if row:
-            ai, adx = row
             cur.execute(
-                """
-                INSERT INTO closed_trades (pair, ai, adx, result, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    closed["pair"],
-                    ai,
-                    adx,
-                    closed["result"],
-                    datetime.utcnow().isoformat(),
-                )
+                "INSERT INTO closed_trades (pair, ai, adx, result, timestamp) VALUES (?, ?, ?, ?, ?)",
+                (closed["pair"], row[0], row[1], closed["result"], datetime.utcnow().isoformat())
             )
 
         conn.commit()
@@ -190,18 +160,17 @@ def main():
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CallbackQueryHandler(lot_pair_handler))
 
-    # 🔴 watcher NESMÍ blokovat
+    # ⬇️ WATCHER – NESMÍ BLOKOVAT
     app.add_handler(
-        MessageHandler(filters.TEXT, watch_signals),
-        block=False
+        MessageHandler(filters.TEXT, watch_signals, block=False)
     )
 
-    # 🟢 lot vstup
+    # ⬇️ LOT INPUT
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text_handler)
     )
 
-    print("Bot běží (LOT + STATUS OK)")
+    print("Bot běží (NO CRASH, LOT + STATUS OK)")
     app.run_polling()
 
 if __name__ == "__main__":
