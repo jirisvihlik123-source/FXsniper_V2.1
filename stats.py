@@ -17,8 +17,8 @@ def calculate_status(limit=30):
     if not rows:
         return "Zatím nejsou žádné uzavřené obchody pro analýzu."
 
-    def winrate(data):
-        return round(sum(data) / len(data) * 100, 1) if data else 0
+    def winrate(arr):
+        return round(sum(arr) / len(arr) * 100, 1) if arr else 0
 
     ai_high, ai_mid, ai_low = [], [], []
     adx_high, adx_mid, adx_low = [], [], []
@@ -41,13 +41,14 @@ def calculate_status(limit=30):
             adx_low.append(win)
 
     return (
-        f"Statistika signálů (posledních {len(rows)})\n\n"
+        f"Statistika (posledních {len(rows)} obchodů)\n\n"
         f"AI:\n"
-        f"70+   → Winrate {winrate(ai_high)} %\n"
-        f"60–70 → Winrate {winrate(ai_mid)} %\n"
-        f"<60   → Winrate {winrate(ai_low)} %\n\n"
+        f"70+   → {winrate(ai_high)} %\n"
+        f"60–70 → {winrate(ai_mid)} %\n"
+        f"<60   → {winrate(ai_low)} %\n\n"
         f"ADX:\n"
-        f"≥30   → Winrate {winrate(adx_high)} %\n"
-        f"20–30 → Winrate {winrate(adx_mid)} %\n"
-        f"<20   → Winrate {winrate(adx_low)} %"
+        f"≥30   → {winrate(adx_high)} %\n"
+        f"20–30 → {winrate(adx_mid)} %\n"
+        f"<20   → {winrate(adx_low)} %"
     )
+
