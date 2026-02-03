@@ -35,7 +35,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Ahoj 👋\n\n"
         "/lot – výpočet lotu\n"
-        "/status – statistika obchodů"
+        "/status – statistika"
     )
 
 # ======================
@@ -93,15 +93,21 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data.clear()
 
-async def lot_pair_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.user_data.get("active_lot"):
-        return
+# ======================
+# CALLBACK – VÝBĚR MĚNY
+# ======================
 
+async def lot_pair_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    # 🔴 DEBUG – KDYŽ TOHLE NEVIDÍŠ, CALLBACK NECHODÍ
+    # (klidně to pak smaž)
+    print("CALLBACK:", query.data)
+
     context.user_data["pair"] = query.data
     context.user_data["step"] = "pips"
+
     await query.edit_message_text("Zadej počet pipů:")
 
 # ======================
@@ -112,11 +118,10 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(calculate_status())
 
 # ======================
-# WATCHER – IGNORUJE /LOT
+# WATCHER – ALERTY
 # ======================
 
 async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ⛔ pokud uživatel jede /lot, watcher mlčí
     if context.user_data.get("active_lot"):
         return
 
@@ -165,15 +170,26 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("lot", lot_command))
     app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CallbackQueryHandler(lot_pair_handler))
 
-    # WATCHER – první, ale chytrý
-    app.add_handler(MessageHandler(filters.TEXT, watch_signals))
+    # 🔴 GROUP 0 – CALLBACKY (MUSÍ BÝT PRVNÍ)
+    app.add_handler(
+        CallbackQueryHandler(lot_pair_handler),
+        group=0
+    )
 
-    # LOT INPUT
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text_handler))
+    # 🟡 GROUP 1 – WATCHER
+    app.add_handler(
+        MessageHandler(filters.TEXT, watch_signals),
+        group=1
+    )
 
-    print("Bot běží – FINÁLNÍ STAV")
+    # 🟢 GROUP 2 – LOT TEXT INPUT
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text_handler),
+        group=2
+    )
+
+    print("Bot běží – FINÁL")
     app.run_polling()
 
 if __name__ == "__main__":
