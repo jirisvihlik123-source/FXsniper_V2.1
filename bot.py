@@ -16,10 +16,6 @@ from stats import calculate_status
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# ======================
-# LOT KALKULAČKA DATA
-# ======================
-
 PAIR_VALUES = {
     "EURUSD": 10,
     "GBPJPY": 9.3,
@@ -38,12 +34,12 @@ PAIR_VALUES = {
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Ahoj 👋\n\n"
-        "/lot – výpočet velikosti lotu\n"
+        "/lot – výpočet lotu\n"
         "/status – statistika obchodů"
     )
 
 # ======================
-# /LOT – START
+# /LOT
 # ======================
 
 async def lot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -51,13 +47,7 @@ async def lot_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["active_lot"] = True
     context.user_data["step"] = "risk"
 
-    await update.message.reply_text(
-        "Zadej částku (USD), kterou chceš riskovat:"
-    )
-
-# ======================
-# /LOT – TEXT INPUT
-# ======================
+    await update.message.reply_text("Zadej částku (USD), kterou chceš riskovat:")
 
 async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("active_lot"):
@@ -65,7 +55,6 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     step = context.user_data.get("step")
 
-    # KROK 1 – RISK
     if step == "risk":
         try:
             context.user_data["risk"] = float(update.message.text.replace(",", "."))
@@ -84,7 +73,6 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # KROK 3 – PIPY
     elif step == "pips":
         try:
             pips = float(update.message.text.replace(",", "."))
@@ -108,10 +96,6 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data.clear()
 
-# ======================
-# /LOT – BUTTON HANDLER
-# ======================
-
 async def lot_pair_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get("active_lot"):
         return
@@ -122,9 +106,7 @@ async def lot_pair_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["pair"] = query.data
     context.user_data["step"] = "pips"
 
-    await query.edit_message_text(
-        "Zadej počet pipů:"
-    )
+    await query.edit_message_text("Zadej počet pipů:")
 
 # ======================
 # /STATUS
@@ -134,7 +116,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(calculate_status())
 
 # ======================
-# WATCHER – MUSÍ BĚŽET VŽDY
+# WATCHER (NESMÍ BLOKOVAT)
 # ======================
 
 async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -142,11 +124,9 @@ async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = update.message.text
-
     conn = get_connection()
     cur = conn.cursor()
 
-    # OPEN ALERT
     open_sig = parse_open(text)
     if open_sig:
         cur.execute(
@@ -165,7 +145,6 @@ async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    # CLOSED ALERT
     closed = parse_closed(text)
     if closed:
         cur.execute(
@@ -204,25 +183,25 @@ async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     init_db()
-
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # COMMANDS
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("lot", lot_command))
     app.add_handler(CommandHandler("status", status_command))
-
-    # BUTTONS
     app.add_handler(CallbackQueryHandler(lot_pair_handler))
 
-    # ⬇️⬇️⬇️ DŮLEŽITÉ POŘADÍ ⬇️⬇️⬇️
-    # 1️⃣ WATCHER – VŽDY PRVNÍ
-    app.add_handler(MessageHandler(filters.TEXT, watch_signals))
+    # 🔴 watcher NESMÍ blokovat
+    app.add_handler(
+        MessageHandler(filters.TEXT, watch_signals),
+        block=False
+    )
 
-    # 2️⃣ LOT INPUT – AŽ POTOM
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text_handler))
+    # 🟢 lot vstup
+    app.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text_handler)
+    )
 
-    print("Bot běží (handler order FIXED)")
+    print("Bot běží (LOT + STATUS OK)")
     app.run_polling()
 
 if __name__ == "__main__":
