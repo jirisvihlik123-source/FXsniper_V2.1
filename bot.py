@@ -61,9 +61,12 @@ async def lot_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Zadej platné číslo.")
             return
 
-        keyboard = [[InlineKeyboardButton(p, callback_data=p)] for p in PAIR_VALUES]
-        context.user_data["step"] = "pair"
+        keyboard = [
+            [InlineKeyboardButton(pair, callback_data=pair)]
+            for pair in PAIR_VALUES
+        ]
 
+        context.user_data["step"] = "pair"
         await update.message.reply_text(
             "Vyber měnový pár:",
             reply_markup=InlineKeyboardMarkup(keyboard)
@@ -109,10 +112,14 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(calculate_status())
 
 # ======================
-# WATCHER (NEBLOKUJE)
+# WATCHER – IGNORUJE /LOT
 # ======================
 
 async def watch_signals(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ⛔ pokud uživatel jede /lot, watcher mlčí
+    if context.user_data.get("active_lot"):
+        return
+
     if not update.message or not update.message.text:
         return
 
@@ -160,17 +167,13 @@ def main():
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CallbackQueryHandler(lot_pair_handler))
 
-    # ⬇️ WATCHER – NESMÍ BLOKOVAT
-    app.add_handler(
-        MessageHandler(filters.TEXT, watch_signals, block=False)
-    )
+    # WATCHER – první, ale chytrý
+    app.add_handler(MessageHandler(filters.TEXT, watch_signals))
 
-    # ⬇️ LOT INPUT
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text_handler)
-    )
+    # LOT INPUT
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text_handler))
 
-    print("Bot běží (NO CRASH, LOT + STATUS OK)")
+    print("Bot běží – FINÁLNÍ STAV")
     app.run_polling()
 
 if __name__ == "__main__":
