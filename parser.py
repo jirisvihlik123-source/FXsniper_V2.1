@@ -2,30 +2,25 @@ import re
 import unicodedata
 
 PAIRS = [
-    "EURUSD", "GBPUSD", "USDJPY", "USDCAD",
-    "AUDCAD", "EURGBP", "GBPJPY", "USDCHF"
+    "EURUSD","GBPUSD","USDJPY","USDCAD",
+    "AUDCAD","EURGBP","GBPJPY","USDCHF"
 ]
 
-def normalize(text: str) -> str:
+def normalize(text):
     text = unicodedata.normalize("NFKD", text)
     text = "".join(c for c in text if not unicodedata.combining(c))
-    text = re.sub(r"[^\w\s\.\|\:\-\+]", " ", text)
     return text.upper()
 
-def parse_open(message: str):
-    text = normalize(message)
-
-    if "CLOSED" in text:
+def parse_open(text):
+    t = normalize(text)
+    if "CLOSED" in t:
         return None
 
-    ai = re.search(r"\bAI\s*(\d+)", text)
-    adx = re.search(r"\bADX\s*([\d.]+)", text)
+    ai = re.search(r"AI\s*(\d+)", t)
+    adx = re.search(r"ADX\s*([\d.]+)", t)
+    pair = next((p for p in PAIRS if p in t), None)
 
-    if not ai or not adx:
-        return None
-
-    pair = next((p for p in PAIRS if p in text), None)
-    if not pair:
+    if not (ai and adx and pair):
         return None
 
     return {
@@ -34,24 +29,14 @@ def parse_open(message: str):
         "adx": float(adx.group(1))
     }
 
-def parse_closed(message: str):
-    text = normalize(message)
-
-    if "CLOSED" not in text:
+def parse_closed(text):
+    t = normalize(text)
+    if "CLOSED" not in t:
         return None
 
-    result_match = re.search(r"\b(WIN|WON|LOSS|LOST)\b", text)
-    if not result_match:
-        return None
-
-    result = "WIN" if result_match.group(1) in ("WIN", "WON") else "LOST"
-
-    pair = next((p for p in PAIRS if p in text), None)
+    pair = next((p for p in PAIRS if p in t), None)
     if not pair:
         return None
 
-    return {
-        "pair": pair,
-        "result": result
-    }
-
+    result = "WIN" if "WON" in t or "WIN" in t else "LOST"
+    return {"pair": pair, "result": result}
