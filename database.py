@@ -1,11 +1,13 @@
 import sqlite3
+import os
 
-DB_NAME = "signals.db"
+DB_PATH = "/data/signals.db"
 
 def get_connection():
-    return sqlite3.connect(DB_NAME)
+    return sqlite3.connect(DB_PATH)
 
 def init_db():
+    os.makedirs("/data", exist_ok=True)
     conn = get_connection()
     cur = conn.cursor()
 
