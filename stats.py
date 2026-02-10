@@ -111,4 +111,3 @@ def calculate_status():
         + "\n📅 Výkon podle dnů v týdnu\n\n"
         + (day_block if day_block else "Zatím není dost dat pro dny v týdnu.")
     )
-
