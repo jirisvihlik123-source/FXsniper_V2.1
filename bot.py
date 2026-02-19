@@ -97,3 +97,6 @@ def main():
     app.run_polling()
 
 main()
+    app.run_polling()
+
+main()
