@@ -1,10 +1,6 @@
 from database import get_connection
 from datetime import datetime
 
-# =========================
-# Barva podle winrate
-# =========================
-
 def day_color(winrate: float) -> str:
     if winrate >= 70:
         return "🟢"
@@ -17,18 +13,11 @@ def day_color(winrate: float) -> str:
     else:
         return "🔴"
 
-# =========================
-# Hlavní /status
-# =========================
-
 def calculate_status():
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("""
-        SELECT result, timestamp
-        FROM closed_trades
-    """)
+    cur.execute("SELECT result, timestamp FROM closed_trades")
     rows = cur.fetchall()
     conn.close()
 
@@ -37,7 +26,6 @@ def calculate_status():
 
     total = len(rows)
 
-    # Inicializace dnů (0=Mon ... 6=Sun)
     days = {i: {"trades": 0, "wins": 0} for i in range(7)}
 
     for result, ts in rows:
@@ -61,9 +49,8 @@ def calculate_status():
 
     lines = []
 
-    for i in range(5):  # jen pracovní dny
+    for i in range(5):
         trades = days[i]["trades"]
-
         if trades == 0:
             continue
 
@@ -82,5 +69,4 @@ def calculate_status():
         "📅 Dlouhodobý výkon podle dnů\n\n"
         + "\n".join(lines)
         + f"\n\nCelkem obchodů: {total}"
-    )
     )
