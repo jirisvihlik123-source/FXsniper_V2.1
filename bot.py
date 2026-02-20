@@ -18,7 +18,6 @@ from stats import calculate_status
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 LOT_TIMEOUT = 120
 
-# 1 LOT = USD za pip
 PAIR_VALUES = {
     "EURUSD": 10.0,
     "GBPUSD": 10.0,
@@ -31,10 +30,7 @@ PAIR_VALUES = {
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "/lot – kalkulačka lotu\n"
-        "/status – statistika"
-    )
+    await update.message.reply_text("/lot – kalkulačka\n/status – statistika")
 
 async def lot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -57,7 +53,7 @@ async def lot_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data["step"] == "risk":
         try:
             risk = float(update.message.text.replace(",", "."))
-        except Exception:
+        except:
             await update.message.reply_text("Zadej číslo.")
             return
 
@@ -70,15 +66,15 @@ async def lot_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif context.user_data["step"] == "pips":
         try:
             pips = float(update.message.text.replace(",", "."))
-        except Exception:
+        except:
             await update.message.reply_text("Zadej číslo pipů.")
             return
 
         pair = context.user_data["pair"]
         risk = context.user_data["risk"]
 
-        lot_size = risk / (pips * PAIR_VALUES[pair])
-        await update.message.reply_text(f"Lot: {lot_size:.3f}")
+        lot = risk / (pips * PAIR_VALUES[pair])
+        await update.message.reply_text(f"Lot: {lot:.3f}")
 
         context.user_data.clear()
 
@@ -93,12 +89,7 @@ async def pair_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(calculate_status())
 
-# =============================
-# WATCHER
-# =============================
-
 async def watcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # když běží /lot flow, watcher neřeší nic
     if context.user_data.get("active"):
         return
     if not update.message:
@@ -109,7 +100,6 @@ async def watcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = get_connection()
     cur = conn.cursor()
 
-    # OPEN SIGNAL
     o = parse_open(text)
     if o:
         cur.execute(
@@ -120,29 +110,12 @@ async def watcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    # CLOSED SIGNAL
     c = parse_closed(text)
     if c:
-        # zkus najít OPEN pro daný pair
-        cur.execute(
-            "SELECT id, ai, adx FROM open_signals WHERE pair=? ORDER BY id LIMIT 1",
-            (c["pair"],)
-        )
-        r = cur.fetchone()
-
-        if r:
-            # máme matching OPEN → vezmeme AI/ADX z OPEN
-            ai_v, adx_v = r[1], r[2]
-            cur.execute("DELETE FROM open_signals WHERE id=?", (r[0],))
-        else:
-            # NEMÁME OPEN → i tak uložíme trade (AI/ADX None)
-            ai_v, adx_v = None, None
-
         cur.execute(
             "INSERT INTO closed_trades VALUES(NULL,?,?,?,?,?)",
-            (c["pair"], ai_v, adx_v, c["result"], datetime.utcnow().isoformat())
+            (c["pair"], None, None, c["result"], datetime.utcnow().isoformat())
         )
-
         conn.commit()
         conn.close()
         return
@@ -151,7 +124,7 @@ async def watcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     if not TOKEN:
-        raise SystemExit("Missing TELEGRAM_TOKEN in env.")
+        raise SystemExit("Missing TELEGRAM_TOKEN.")
 
     init_db()
 
@@ -162,8 +135,6 @@ def main():
     app.add_handler(CommandHandler("status", status))
 
     app.add_handler(CallbackQueryHandler(pair_cb), group=0)
-
-    # watcher musí být dřív než lot_text, aby se nepřetahovali
     app.add_handler(MessageHandler(filters.TEXT, watcher), group=1)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lot_text), group=2)
 
