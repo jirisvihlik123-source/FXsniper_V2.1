@@ -1,0 +1,25 @@
+{
+  "avg_winrate": 0.0,
+  "best_bin": 30,
+  "best_winrate": 0.0,
+  "worst_bin": 30,
+  "worst_winrate": 0.0,
+  "bins": [
+    {
+      "score_bin": 30.0,
+      "winrate": 0.0
+    },
+    {
+      "score_bin": 35.0,
+      "winrate": 0.0
+    },
+    {
+      "score_bin": 40.0,
+      "winrate": 0.0
+    },
+    {
+      "score_bin": 45.0,
+      "winrate": 0.0
+    }
+  ]
+}

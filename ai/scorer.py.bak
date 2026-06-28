@@ -1,0 +1,94 @@
+# ai/scorer.py
+import os
+import numpy as np
+import joblib
+from .features import FEATURE_COLUMNS
+
+class AIScorer:
+    """
+    Pokud existuje ai/model.pkl → použije se (predict_proba).
+    Jinak běží robustní heuristika 0..100 zaměřená na:
+      - silnější trend (ADX, EMA dist), ale dovolí i chop s kvalitní svíčkou u S/R
+      - konfluenci HTF
+      - penalizace špatných knotu (wick), přepálené range a příliš daleko od EMA50
+    """
+    def __init__(self, model_path: str | None = None):
+        self.model = None
+        if model_path and os.path.exists(model_path):
+            try:
+                self.model = joblib.load(model_path)
+            except Exception:
+                self.model = None
+
+    # ---------- Heuristický skóre ----------
+    def _heur_score(self, f: dict) -> float:
+        # Bezpečné čtení + defaulty
+        adx = float(f.get("adx", 0.0))
+        atr = float(f.get("atr", 0.0))
+        ema_dist = float(f.get("ema_dist_atr", 0.0))
+        ema_align = float(f.get("ema_alignment", 0.0))  # -1..+1
+        ema50_slope = float(f.get("ema50_slope", 0.0))
+        ema200_slope = float(f.get("ema200_slope", 0.0))
+        close_ema50 = float(f.get("close_ema50_dist_atr", 0.0))
+        near_sr = float(f.get("near_sr", 0.0))
+        wick = float(f.get("wick_ratio", 1.0))
+        range_atr = float(f.get("range_atr", 1.0))
+        engulf = float(f.get("engulf", 0.0))
+        pinbar = float(f.get("pinbar", 0.0))
+        vol_pctl = float(f.get("vol_pctl", 50.0))
+        htf_trend = float(f.get("htf_trend", 0.0))
+        rsi = float(f.get("rsi", 50.0))
+        rsi_htf = float(f.get("rsi_htf", 50.0))
+
+        # Normalizace / klipy
+        adx_n = min(1.0, adx / 35.0)              # 0..1
+        ema_sep = np.tanh(ema_dist / 2.0)         # 0..~1 (větší oddělení EMA = silnější trend)
+        slope_n = np.tanh(abs(ema50_slope) * 8.0) # 0..1
+        slope200 = np.tanh(abs(ema200_slope) * 4.0)
+
+        # Pozice u EMA50 – ideál: close v rozumném dosahu (0.1..0.8 ATR)
+        near_ema_bonus = np.clip(0.8 - abs(close_ema50 - 0.45), -0.2, 0.8)
+
+        # Candle kvalita
+        wick_pen = np.clip((wick - 1.5) / 2.0, 0.0, 1.0) * 0.6  # penalizace dlouhých knotů
+        range_quality = np.clip(1.0 - abs(range_atr - 0.8), 0.0, 1.0)  # nejlepší je ~0.8 ATR svíčka
+
+        # HTF konfluence: trend + RSI z H1 ne extrém proti směru
+        htf_bonus = 0.0
+        if htf_trend != 0.0:
+            htf_bonus += 0.2 if abs(ema_align) > 0.0 and np.sign(ema_align) == np.sign(htf_trend) else 0.0
+            if 35.0 <= rsi_htf <= 65.0:  # ne proti silnému extrému
+                htf_bonus += 0.1
+
+        # S/R a patterny – umožní „kvalitní“ protisměrné mean reversion
+        sr_pat_bonus = 0.0
+        if near_sr > 0.0:
+            sr_pat_bonus += 0.15
+            sr_pat_bonus += 0.15 if (pinbar > 0.0 or engulf > 0.0) else 0.0
+
+        # Volatilita – když je úplně mrtvo (velmi nízký percentil), malý malus
+        vol_adj = -0.15 if vol_pctl < 35.0 else (0.0 if vol_pctl < 65.0 else 0.1)
+
+        # Skládání: trendová konfluence *nebo* mean reversion u S/R
+        trend_block = 0.55*adx_n + 0.25*ema_sep + 0.20*slope_n + 0.10*slope200 + 0.10*near_ema_bonus + htf_bonus
+        meanrev_block = 0.35*near_sr + 0.25*range_quality + 0.15*(pinbar+engulf>0) + 0.20*(1.0 - wick_pen)
+
+        base = max(trend_block, meanrev_block) + sr_pat_bonus + vol_adj
+        base = np.clip(base, 0.0, 1.2)
+
+        score = float(100.0 * base)
+        # Jemné doladění: extrémní wick → oříznout
+        if wick_pen > 0.5:
+            score *= 0.85
+        return float(np.clip(score, 0.0, 100.0))
+
+    # ---------- Public API ----------
+    def score(self, feat: dict) -> float:
+        if self.model is not None:
+            X = np.array([[feat.get(k, 0.0) for k in FEATURE_COLUMNS]], dtype=float)
+            try:
+                prob = float(self.model.predict_proba(X)[0, 1])
+                return float(100.0 * prob)
+            except Exception:
+                pass
+        return self._heur_score(feat)
